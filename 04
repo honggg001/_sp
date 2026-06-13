@@ -1,0 +1,123 @@
+第一部分：破曉——系統程式的基石
+第 1 章：歡迎來到地下城：什麼是系統程式？
+
+使用者空間（User Space）與核心空間（Kernel Space）的楚河漢界。
+
+CPU 權限級別（Ring 0 vs. Ring 3）。
+
+系統呼叫（System Call）的幕後觸發機制。
+
+第 2 章：記憶體的真實密碼：虛擬記憶體與定址
+
+為什麼程式看到的記憶體地址都是「假的」？
+
+記憶體管理單元（MMU）與分頁機制（Paging）。
+
+記憶體映射（mmap）的高效魔法。
+
+第二部分：演繹——進程、執行緒與資源調度
+第 3 章：進程的生老病死：Process 管理
+
+進程的誕生：fork() 與 execve() 的分身術。
+
+孤兒進程與殭屍進程（Zombie Process）的成因與清理。
+
+寫入時複製（Copy-on-Write, COW）技術。
+
+第 4 章：多工的藝術：Thread 執行緒與同步
+
+執行緒的本質：共享記憶體的進程。
+
+POSIX Threads (pthreads) 實戰。
+
+資料競爭（Data Race）與死結（Deadlock）的預防。
+
+互斥鎖（Mutex）、條件變數（Condition Variable）與信號量（Semaphore）。
+
+第 5 章：進程間的悄悄話：IPC 機制
+
+無名管道（Pipe）與具名管道（FIFO）。
+
+共享記憶體（Shared Memory）——最快的 IPC 速度。
+
+Unix Domain Socket：本地高效通訊。
+
+第三部分：吞吐——檔案系統與 I/O 的極限
+第 6 章：萬物皆檔案：Linux 檔案系統與 VFS
+
+虛擬檔案系統（VFS）的抽象架構。
+
+檔案描述符（File Descriptor, FD）與萬物皆檔案的哲學。
+
+Inodes 與檔案硬連結（Hard Link）、軟連結（Symbolic Link）的底層差異。
+
+第 7 章：榨乾硬碟效能：高效能 I/O 演進史
+
+阻塞式（Blocking）與非阻塞式（Non-blocking）I/O。
+
+多路復用：從古老的 select/poll 到現代的 epoll。
+
+異步 I/O 的終極兵器：Linux io_uring 深入解析。
+
+第四部分：防線——訊號、時間與記憶體安全
+第 8 章：突如其來的打斷：Signal 訊號處理
+
+非同步事件的敲門聲：什麼是 Signal？
+
+常見訊號（SIGINT, SIGKILL, SIGSEGV）的預設行為。
+
+編寫「非同步訊號安全」（Async-Signal-Safe）函數的禁忌。
+
+第 9 章：現代系統程式的新救星：Rust 系統編程
+
+C 語言的痛：記憶體洩漏與懸空指標（Dangling Pointer）。
+
+Rust 的所有權（Ownership）與生命週期（Lifetime）如何拯救系統程式。
+
+使用 Rust 進行 FFI（Foreign Function Interface）與 C 函式庫互動。
+
+📝 精彩內文試閱：第 3 章 —— fork() 的分身術
+3.2 複製羊與進程的誕生
+在 Linux 世界中，除了 0 號進程（Idle 進程）和 1 號進程（systemd）是由核心直接初始化之外，其餘所有的進程都是透過「複製」現有的進程而誕生的。這個複製的系統呼叫，就叫做 fork()。
+
+當一個進程呼叫 fork() 時，作業系統會做以下幾件事：
+
+分配一個全新的 PID（進程識別碼）給子進程。
+
+複製父進程的頁表（Page Table），這意味著子進程在初始狀態下，看到的記憶體內容與父進程完全一模一樣。
+
+複製父進程的檔案描述符表。如果父進程原本打開了一個檔案，子進程也會共享這個檔案的讀寫位置。
+
+有趣的是，fork() 是一個「呼叫一次，返回兩次」的奇特函數。
+
+💻 C 語言實戰範例
+C
+#include <stdio.h>
+#include <unistd.h>
+#include <sys/types.h>
+
+int main() {
+    pid_t pid;
+    int counter = 0;
+
+    printf("準備複製進程...\n");
+
+    pid = fork(); // 魔法發生的地方！
+
+    if (pid < 0) {
+        // 錯誤處理
+        fprintf(stderr, "Fork 失敗！\n");
+        return 1;
+    } else if (pid == 0) {
+        // 這裡是子進程
+        counter++;
+        printf("【子進程】我是兒子，我的 PID 是 %d，counter = %d\n", getpid(), counter);
+    } else {
+        // 這裡是父進程，pid 變數會存放子進程的 PID
+        counter--;
+        printf("【父進程】我是爸爸，我創造了子進程 %d，counter = %d\n", pid, counter);
+    }
+
+    printf("【共用】進程 %d 結束執行\n", getpid());
+    return 0;
+}
