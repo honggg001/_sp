@@ -1,0 +1,87 @@
+一、 加上 while 語法的處理與設計原理
+在遞迴下降解析器（Recursive Descent Parser）中，while 迴圈的本質是「條件檢查與跳躍（Jump）」。為了實現迴圈，編譯器需要生成特定的標記（Labels）或指令位址，以便在每次迴圈結束後跳回開頭，或在條件不成立時跳出迴圈。
+
+1. 語法結構 (EBNF)
+首先，while 語法的 EBNF 形式通常定義如下：
+
+EBNF
+WhileStmt = "while" "(" Expr ")" Stmt
+2. 生成指令的邏輯架構
+編譯器在解析 while 時，需要利用標記（Label）來控制程式流。以下是其實作的邏輯步驟：
+
+記下迴圈開始位置（L_start）： 這是每次迴圈執行完後，要跳回來重新檢查條件的地方。
+
+解析並計算條件表達式（Expr）： 編譯表達式，使其結果留在暫存器或堆疊頂端。
+
+生成條件跳躍指令（Bz, Branch if Zero）： 檢查表達式的結果。如果為假（0），則跳躍到迴圈結束位置（L_end）。
+
+解析迴圈主體（Stmt）： 編譯 while 裡面的陳述句。
+
+生成無條件跳躍指令（Jmp）： 主體執行完後，無條件跳回迴圈開始位置（L_start）。
+
+設定迴圈結束位置（L_end）： 標記出迴圈結束的目標位址，供步驟 3 的條件跳躍使用。
+
+3. 程式碼實作虛擬碼範例 (C 語言版)
+在 compiler.c 中，您通常需要新增一個 whileStmt() 函式，程式碼結構大致如下：
+
+C
+void whileStmt() {
+    int L_start = nextLabel(); // 產生迴圈開始的標記
+    int L_end = nextLabel();   // 產生迴圈結束的標記
+
+    skip("while");
+    skip("(");
+    
+    emitLabel(L_start);        // 輸出迴圈開始的標記位置
+    expr();                    // 解析條件表達式，計算結果
+    
+    skip(")");
+    
+    emitBz(L_end);             // 如果條件為假，跳到 L_end
+    
+    stmt();                    // 解析迴圈主體
+    
+    emitJmp(L_start);          // 無條件跳回 L_start 重新檢查
+    emitLabel(L_end);          // 輸出迴圈結束的標記位置
+}
+二、 看懂 p0 compiler 中的函數呼叫機制是如何運作的
+p0 編譯器的函數呼叫機制（Function Call Mechanism）通常是基於 「活動紀錄（Activation Record / Stack Frame）」 的概念，透過環境中的「堆疊（Stack）」來管理區域變數與返回位址。
+
+1. 核心組成元素
+當一個函數被呼叫時，系統會在堆疊上為其配置一塊空間，稱為 Stack Frame，其內部包含：
+
+參數（Parameters）： 呼叫者傳遞給該函數的資料。
+
+返回位址（Return Address）： 紀錄函數執行完後，應該跳回主程式的哪一行指令繼續執行。
+
+框架指標 / 基底指標（Frame Pointer, 通常指 FP 或 BP）： 指向當前 Stack Frame 的起始點，用來定位區域變數與參數。
+
+區域變數（Local Variables）： 該函數內部宣告的變數。
+
+2. 函數呼叫（Call）與返回（Return）的運作流程
+A. 呼叫端（Caller）與進入函數（Callee Prologue）
+當編譯器解析到 f(a, b) 這樣的函數呼叫時：
+
+推入參數（Push Arguments）： 將參數 a 和 b 的值計算出來並推入堆疊。
+
+發出 CALL 指令： 執行 CALL 指令，此時 CPU 會自動將「下一條指令的位址（返回位址）」推入堆疊，並將程式計數器（PC）指向函數 f 的開頭。
+
+儲存舊的 FP： 進入函數後，會把舊的 Frame Pointer 推入堆疊保存，然後將 FP 指向目前的堆疊頂端（建立新的 Frame）。
+
+配置區域變數空間： 堆疊指標（SP）向下（或向上，取決於堆疊方向）移動，為函數內的區域變數保留空間。
+
+B. 函數內部的變數尋找（區域變數的尋找）
+參考資料中提到的「區域變數的尋找」，其原理是相對定址（Relative Addressing）。
+
+函數內部的變數在編譯時期無法得知絕對記憶體位址，但知道它們相對於 FP 的距離（Offset）。
+
+例如：第一個參數可能是 [FP + 8]，第一個區域變數可能是 [FP - 4]。編譯器會透過 FP + offset 來存取這些變數。
+
+C. 函數返回（Callee Epilogue）
+當函數執行到 return 或結尾時：
+
+恢復堆疊指標（SP）： 釋放區域變數空間（將 SP 設回 FP 的位置）。
+
+恢復舊的 FP： 從堆疊中彈出（Pop）之前儲存的舊 Frame Pointer，讓老爸函數的環境恢復。
+
+發出 RET 指令： 從堆疊中彈出「返回位址」到 PC，程式便會跳回呼叫函數的下一行程式碼繼續執行。
