@@ -1,0 +1,139 @@
+一、 核心概念說明 (題目 1)
+在多工的作業系統中，為了提升效能，我們常會使用多執行緒技術，但這也帶來了資料同步的挑戰：
+
+Thread (執行緒)： 作業系統能夠進行運算排程的最小單位。一個處理程序（Process）可以包含多個 Thread，它們會共享相同的記憶體空間。
+
+Race Condition (競爭條件)： 當多個 Thread 同時存取與修改同一塊共享資料，且最後的結果取決於 Thread 執行的先後順序（時序）時，就會發生錯誤。
+
+Mutex (互斥鎖)： 一種同步機制，用來確保同一時間只有一個 Thread 可以進入「關鍵區段（Critical Section）」存取共享資源，避免 Race Condition。
+
+Deadlock (死結)： 當兩個或多個 Thread 在執行過程中，因爭奪資源而造成的一種互相等待的僵持狀態。例如：Thread A 拿著鎖 1 等鎖 2，Thread B 拿著鎖 2 等鎖 1，雙方都動彈不得。
+
+二、 程式模擬與實作說明 (題目 2 ~ 4)
+以下程式皆使用 Python 的 threading 模組進行實作。
+
+2. 模擬銀行存提款（避免 Race Condition）
+情境： 模擬同一個人開兩個執行緒，一個狂存錢、一個狂領錢各 100,000 次。
+
+實作重點： 如果不用 Lock（Mutex），最後的餘額通常不會是 0（這就是 Race Condition）。我們必須加上 Lock 來確保金額正確。
+
+Python
+import threading
+
+balance = 0
+lock = threading.Lock()
+
+def deposit(amount, times):
+    global balance
+    for _ in range(times):
+        # 使用 Mutex 鎖定關鍵區段
+        with lock:
+            balance += amount
+
+def withdraw(amount, times):
+    global balance
+    for _ in range(times):
+        with lock:
+            balance -= amount
+
+if __name__ == "__main__":
+    count = 100000
+    # 建立存、提款執行緒
+    t1 = threading.Thread(target=deposit, args=(100, count))
+    t2 = threading.Thread(target=withdraw, args=(100, count))
+    
+    t1.start()
+    t2.start()
+    t1.join()
+    t2.join()
+    
+    print(self_defined_var := f"最終銀行帳戶餘額: {balance} (正確答案應為 0)")
+3. 模擬生產者消費者問題 (Producer-Consumer Problem)
+情境： 生產者負責把資料放進緩衝區（Buffer），消費者負責拿出來。緩衝區有滿和空的限制。
+
+實作重點： 使用 Python 內建的 queue.Queue，它內部已經幫我們封裝好了 Mutex 與 Condition 條件變數，是安全的多執行緒佇列。
+
+Python
+import threading
+import time
+import queue
+import random
+
+# 限制緩衝區大小為 5
+buffer = queue.Queue(maxsize=5)
+
+def producer():
+    for i in range(10):
+        item = f"產品-{i}"
+        buffer.put(item) # 如果滿了，會自動格阻（Block）等待空間
+        print(f"[生產者] 製造了 {item}，目前庫存: {buffer.qsize()}")
+        time.sleep(random.uniform(0.1, 0.5))
+
+def consumer():
+    for _ in range(10):
+        item = buffer.get() # 如果空了，會自動格阻（Block）等待新產品
+        print(f"[消費者] 消耗了 {item}，目前庫存: {buffer.qsize()}")
+        buffer.task_done()
+        time.sleep(random.uniform(0.2, 0.6))
+
+if __name__ == "__main__":
+    t_prod = threading.Thread(target=producer)
+    t_cons = threading.Thread(target=consumer)
+    
+    t_prod.start()
+    t_cons.start()
+    t_prod.join()
+    t_cons.join()
+    print("生產者與消費者模擬結束。")
+4. 模擬哲學家就餐問題 (Dining Philosophers Problem)
+情境： 5 個哲學家圍繞圓桌，只有 5 支筷子。每個人必須同時拿到左邊與右邊的筷子才能吃飯。如果每個人都先拿左邊的筷子，就會發生死結（Deadlock）。
+
+實作重點（打破死結）： 我們讓其中一位哲學家（例如最後一位）先拿右邊再拿左邊（破壞循環等待條件），這樣就能順利完成用餐，絕對不會卡死。
+
+Python
+import threading
+import time
+import random
+
+# 5 支筷子代表 5 個互斥鎖
+chopsticks = [threading.Lock() for _ in range(5)]
+
+def philosopher(philosopher_id):
+    left_fork = philosopher_id
+    right_fork = (philosopher_id + 1) % 5
+    
+    # 模擬思考與用餐 3 次
+    for _ in range(3):
+        print(f"哲學家 {philosopher_id} 正在思考...")
+        time.sleep(random.uniform(0.1, 0.3))
+        
+        # 為了防止死結：最後一個哲學家先拿右邊，其餘先拿左邊
+        if philosopher_id == 4:
+            first_fork, second_fork = right_fork, left_fork
+        else:
+            first_fork, second_fork = left_fork, right_fork
+            
+        print(f"哲學家 {philosopher_id} 想拿第一支筷子...")
+        with chopsticks[first_fork]:
+            print(f"哲學家 {philosopher_id} 拿到了第一支筷子，想拿第二支...")
+            with chopsticks[second_fork]:
+                print(f"哲學家 {philosopher_id} 開始吃通心粉 🍜")
+                time.sleep(random.uniform(0.1, 0.2))
+        print(f"哲學家 {philosopher_id} 放下筷子，用餐完畢。")
+
+if __name__ == "__main__":
+    threads = []
+    for i in range(5):
+        t = threading.Thread(target=philosopher, args=(i,))
+        threads.append(t)
+        t.start()
+        
+    for t in threads:
+        t.join()
+    print("所有哲學家都順利吃飽了！")
+三、 程式實作心得與技術總結 (題目 5)
+銀行存提款實驗： 在不加鎖的情況下，由於 balance += amount 在 CPU 底層並非單一原子操作（Atomic Operation），多個 Thread 交錯執行會覆蓋彼此的計算結果，導致最終餘額出錯。透過 with lock:（Mutex），我們成功確保了資料的原子性。
+
+生產者消費者實驗： 利用有界限的佇列（Bounded Queue）與條件通知，解決了執行緒之間「速度不對等」的問題。當緩衝區滿了，生產者會自動休息；當緩衝區空了，消費者會自動等待，達成良好的執行緒協調（Coordination）。
+
+哲學家就餐實驗： 完美展示了死結的預防。死結的四個必要條件為：互斥、不可強奪、佔有並等待、循環等待。本實作透過改變最後一位哲學家的拿筷順序，直接打破了「循環等待（Circular Wait）」，進而根治了死結問題。
