@@ -1,0 +1,32 @@
+1. 語言設計構想與規格
+語言名稱： EzMath
+
+型態系統： 弱型態 / 僅支援整數（Integer）
+
+執行方式： 解譯器（Interpreter）直接執行
+
+核心功能： 支援變數賦值、基本四則運算、if-else 條件判斷、以及 print 輸出。
+
+撰寫該語言的程式範例 (example.ez)
+Plaintext
+x = 10
+y = 20
+z = x + y * 2
+
+if z > 40 {
+    print z
+} else {
+    print 0
+}
+2. 設計 EBNF 語法
+這是編譯器作業的靈魂，有了 EBNF，AI 就能精準寫出解析器（Parser）：
+
+EBNF
+Prog      = Stmt*
+Stmt      = AssignStmt | IfStmt | PrintStmt
+AssignStmt= Id "=" Expr
+IfStmt    = "if" Expr "{" Stmt* "}" ( "else" "{" Stmt* "}" )?
+PrintStmt = "print" Expr
+Expr      = Term ( ("+" | "-") Term )*
+Term      = Factor ( ("*" | "/") Factor )*
+Factor    = Id | Num | "(" Expr ")"
