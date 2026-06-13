@@ -1,0 +1,327 @@
+專案名稱：MotoRunner
+專案簡介
+MotoRunner 是一款基於 HTML5 Canvas 開發的 2D 橫向捲軸橫版橫衝直撞遊戲。本專案致敬了經典的 Google Chrome 斷線小恐龍（T-Rex Runner），但將主角換成了帥氣的摩托車。玩家需要控制摩托車在無盡的荒漠賽道上奔馳，並透過跳躍來躲避隨機出現的障礙物（如：仙人掌、廢棄輪胎）。隨著遊戲時間增加，速度會越來越快，挑戰玩家的極限反應！
+功能特色
+經典玩法，全新視覺：將原本的小恐龍替換為摩托車動態圖像（本範例以幾何圖形與 Canvas 繪製呈現，可自由替換圖片）。
+
+物理跳躍機制：模擬重力與上升力，讓摩托車的跳躍與下落感更為流暢。
+
+動態障礙物：隨機生成不同大小、不同速度的障礙物，增加遊戲趣味性與不確定性。
+
+即時計分系統：畫面右上角即時顯示當前得分（Score）與歷史最高分（High Score）。
+
+自適應難度：遊戲得分越高，背景捲軸與障礙物移動速度會隨之加快。
+Plaintext
+moto-runner/
+│
+├── index.html      # 遊戲網頁主結構
+├── style.css       # 遊戲畫面視覺樣式
+└── game.js         # 核心遊戲邏輯與 Canvas 繪製
+原始碼實作
+1. index.html
+HTML
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MotoRunner - 極限摩托衝鋒</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="game-container">
+        <h1>MotoRunner</h1>
+        <div class="score-board">
+            <span id="high-score">HIGH: 00000</span>
+            <span id="score">SCORE: 00000</span>
+        </div>
+        
+        <canvas id="gameCanvas" width="800" height="300"></canvas>
+        
+        <div id="game-over-screen" class="hidden">
+            <h2>GAME OVER</h2>
+            <p>按下 <b>空白鍵 (Space)</b> 重新開始</p>
+        </div>
+        
+        <div class="instructions">
+            <p>操作說明：按下 <b>空白鍵 (Space)</b> 或 <b>上方向鍵 (↑)</b> 讓摩托車跳躍</p>
+        </div>
+    </div>
+
+    <script src="game.js"></script>
+</body>
+</html>
+2. style.css
+CSS
+body {
+    margin: 0;
+    padding: 0;
+    background-color: #f7f7f7;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+}
+
+.game-container {
+    text-align: center;
+    position: relative;
+}
+
+h1 {
+    color: #333;
+    margin-bottom: 10px;
+}
+
+.score-board {
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 18px;
+    font-weight: bold;
+    color: #555;
+    margin-bottom: 10px;
+    display: flex;
+    justify-content: space-between;
+    padding: 0 10px;
+}
+
+#high-score {
+    color: #888;
+    margin-right: 20px;
+}
+
+canvas {
+    background-color: #fafafa;
+    border-bottom: 3px solid #555;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    display: block;
+}
+
+.instructions {
+    margin-top: 15px;
+    color: #777;
+    font-size: 14px;
+}
+
+#game-over-screen {
+    position: absolute;
+    top: 55%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background-color: rgba(255, 255, 255, 0.9);
+    padding: 20px 40px;
+    border-radius: 8px;
+    border: 2px solid #333;
+}
+
+#game-over-screen h2 {
+    margin: 0 0 10px 0;
+    color: #d9534f;
+}
+
+.hidden {
+    display: none !important;
+}
+3. game.js
+JavaScript
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+const scoreEl = document.getElementById('score');
+const highScoreEl = document.getElementById('high-score');
+const gameOverScreen = document.getElementById('game-over-screen');
+
+// 遊戲狀態
+let isPlaying = true;
+let score = 0;
+let highScore = 0;
+let gameSpeed = 6;
+
+// 摩托車（主角）屬性
+const moto = {
+    x: 50,
+    y: 200,
+    width: 60,
+    height: 40,
+    vy: 0,
+    gravity: 0.6,
+    jumpForce: -12,
+    isGrounded: false,
+    
+    // 繪製帥氣的幾何摩托車
+    draw() {
+        ctx.save();
+        // 車身顏色
+        ctx.fillStyle = '#ff3333'; 
+        // 車體主幹
+        ctx.fillRect(this.x + 10, this.y + 10, 40, 15);
+        // 車頭
+        ctx.fillStyle = '#333';
+        ctx.fillRect(this.x + 45, this.y, 8, 20);
+        
+        // 後輪
+        ctx.beginPath();
+        ctx.arc(this.x + 10, this.y + 30, 10, 0, Math.PI * 2);
+        ctx.fillStyle = '#333';
+        ctx.fill();
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = '#fff';
+        ctx.stroke();
+        
+        // 前輪
+        ctx.beginPath();
+        ctx.arc(this.x + 45, this.y + 30, 10, 0, Math.PI * 2);
+        ctx.fillStyle = '#333';
+        ctx.fill();
+        ctx.stroke();
+
+        // 騎士安全帽（簡單裝飾）
+        ctx.beginPath();
+        ctx.arc(this.x + 25, this.y, 8, 0, Math.PI * 2);
+        ctx.fillStyle = '#000';
+        ctx.fill();
+
+        ctx.restore();
+    },
+    
+    update() {
+        // 重力影響
+        this.vy += this.gravity;
+        this.y += this.vy;
+        
+        // 地面碰撞偵測 (畫布高度 300 - 地面高度 40 = 260)
+        const groundY = canvas.height - this.height - 20;
+        if (this.y >= groundY) {
+            this.y = groundY;
+            this.vy = 0;
+            this.isGrounded = true;
+        } else {
+            this.isGrounded = false;
+        }
+    },
+    
+    jump() {
+        if (this.isGrounded) {
+            this.vy = this.jumpForce;
+        }
+    }
+};
+
+// 障礙物類別
+class Obstacle {
+    constructor() {
+        this.x = canvas.width;
+        this.width = 20 + Math.random() * 20; // 隨機寬度
+        this.height = 30 + Math.random() * 30; // 隨機高度
+        this.y = canvas.height - this.height - 20;
+    }
+    
+    draw() {
+        ctx.fillStyle = '#555555'; // 障礙物顏色
+        ctx.fillRect(this.x, this.y, this.width, this.height);
+    }
+    
+    update() {
+        this.x -= gameSpeed;
+    }
+}
+
+let obstacles = [];
+let spawnTimer = 0;
+
+// 監聽鍵盤事件
+window.addEventListener('keydown', (e) => {
+    if (e.code === 'Space' || e.code === 'ArrowUp') {
+        e.preventDefault(); // 防止網頁捲動
+        if (isPlaying) {
+            moto.jump();
+        } else {
+            resetGame();
+        }
+    }
+});
+
+// 碰撞偵測 AABB
+function checkCollision(rect1, rect2) {
+    return rect1.x < rect2.x + rect2.width &&
+           rect1.x + rect1.width > rect2.x &&
+           rect1.y < rect2.y + rect2.height &&
+           rect1.y + rect1.height > rect2.y;
+}
+
+// 數字補零格式化 (e.g., 00123)
+function formatScore(num) {
+    return String(num).padStart(5, '0');
+}
+
+// 遊戲重置
+function resetGame() {
+    isPlaying = true;
+    score = 0;
+    gameSpeed = 6;
+    obstacles = [];
+    moto.y = 200;
+    moto.vy = 0;
+    gameOverScreen.classList.add('hidden');
+    animate();
+}
+
+// 遊戲主迴圈
+function animate() {
+    if (!isPlaying) return;
+    
+    // 1. 清空畫布
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    
+    // 2. 繪製地面線
+    ctx.beginPath();
+    ctx.moveTo(0, canvas.height - 20);
+    ctx.lineTo(canvas.width, canvas.height - 20);
+    ctx.strokeStyle = '#555';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    
+    // 3. 更新與繪製摩托車
+    moto.update();
+    moto.draw();
+    
+    // 4. 處理障礙物生成與移動
+    spawnTimer++;
+    // 隨機間隔生成障礙物
+    if (spawnTimer > 80 + Math.random() * 60) {
+        obstacles.push(new Obstacle());
+        spawnTimer = 0;
+    }
+    
+    for (let i = obstacles.length - 1; i >= 0; i--) {
+        obstacles[i].update();
+        obstacles[i].draw();
+        
+        // 碰撞偵測
+        if (checkCollision(moto, obstacles[i])) {
+            isPlaying = false;
+            if (score > highScore) {
+                highScore = score;
+                highScoreEl.innerText = `HIGH: ${formatScore(highScore)}`;
+            }
+            gameOverScreen.classList.remove('hidden');
+        }
+        
+        // 移除超出螢幕的障礙物
+        if (obstacles[i].x + obstacles[i].width < 0) {
+            obstacles.splice(i, 1);
+        }
+    }
+    
+    // 5. 計分與難度提升
+    score++;
+    scoreEl.innerText = `SCORE: ${formatScore(score)}`;
+    
+    if (score % 500 === 0) {
+        gameSpeed += 0.8; // 每過 500 分加速
+    }
+    
+    requestAnimationFrame(animate);
+}
+
+// 啟動遊戲
+animate();
